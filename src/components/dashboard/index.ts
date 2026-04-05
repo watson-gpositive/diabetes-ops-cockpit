@@ -3,5 +3,6 @@ export { IobCobCard } from "./IobCobCard";
 export { BasalCard } from "./BasalCard";
 export { LastMealCard } from "./LastMealCard";
 export { AnomalyAlertsCard } from "./AnomalyAlertsCard";
+export { LoopStatusCard } from "./LoopStatusCard";
 export { CardWrapper } from "./CardWrapper";
 export type { LoadState } from "./types";

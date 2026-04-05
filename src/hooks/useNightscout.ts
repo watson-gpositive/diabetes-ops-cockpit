@@ -381,3 +381,81 @@ export function useAlerts() {
     },
   );
 }
+
+type LoopStatusValue = "Looping" | "Not Looping" | "Suspended" | "Error" | "Unknown";
+
+export interface LoopStatusData {
+  status: LoopStatusValue;
+  lastLoop: number | null;
+  enactedRate: number | null;
+  enactedDuration: number | null;
+  reason: string | null;
+  pumpStatus: string | null;
+  reservoir: number | null;
+}
+
+export function useLoopStatus() {
+  return useSWR(
+    "nightscout:loopStatus",
+    async () => {
+      const config = getNightscoutConfig();
+      if (!config) throw new Error("Nightscout config not available");
+
+      const result = await fetchLatestDeviceStatus({
+        url: config.url,
+        token: config.token,
+      });
+
+      if (!result.ok || !result.data) {
+        throw new Error(result.error?.message ?? "Failed to load loop status");
+      }
+
+      const device = result.data as unknown as Record<string, unknown>;
+      const loopRaw = (device.loop ?? device.openaps ?? null) as Record<string, unknown> | null;
+
+      // Determine status
+      let status: LoopStatusValue = "Unknown";
+      if (loopRaw) {
+        const rawStatus = loopRaw.status as string | undefined;
+        if (rawStatus === "Looping" || rawStatus === "looped") status = "Looping";
+        else if (rawStatus === "Not Looping" || rawStatus === "notLooping" || rawStatus === "looping") status = "Not Looping";
+        else if (rawStatus === "Suspended" || rawStatus === "suspended") status = "Suspended";
+        else if (rawStatus === "Error" || rawStatus === "error") status = "Error";
+      }
+
+      // Pump status
+      const pumpRaw = (device.pump ?? null) as Record<string, unknown> | null;
+      const pumpStatus = typeof pumpRaw?.status === "string" ? pumpRaw.status : null;
+
+      // Reservoir
+      const reservoir = typeof pumpRaw?.reservoir === "number" ? (pumpRaw.reservoir as number) : null;
+
+      // Last loop timestamp
+      const lastLoop = (loopRaw?.timestamp as number | null) ?? (device.created_at as number | null);
+
+      // Enacted
+      const enactedRaw = (loopRaw?.enacted ?? null) as Record<string, unknown> | null;
+      const enactedRate = typeof enactedRaw?.rate === "number" ? (enactedRaw.rate as number) : null;
+      const enactedDuration = typeof enactedRaw?.duration === "number" ? Math.round(enactedRaw.duration as number) : null;
+
+      // Reason
+      const reason = typeof loopRaw?.reason === "string" ? (loopRaw.reason as string) : null;
+
+      return {
+        status,
+        lastLoop,
+        enactedRate,
+        enactedDuration,
+        reason,
+        pumpStatus,
+        reservoir,
+      } satisfies LoopStatusData;
+    },
+    {
+      refreshInterval: REFRESH_INTERVAL,
+      revalidateOnMount: false,
+      shouldRetryOnError: true,
+      errorRetryCount: 3,
+    },
+  );
+}

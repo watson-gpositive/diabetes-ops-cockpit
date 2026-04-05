@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  diabetes-ops-cockpit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NIGHTSCOUT_URL: "${NIGHTSCOUT_URL:-https://yournightscout.example.com}"
+        NIGHTSCOUT_TOKEN: "${NIGHTSCOUT_TOKEN:-}"
+    image: diabetes-ops-cockpit:latest
+    container_name: diabetes-ops-cockpit
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NIGHTSCOUT_URL: "${NIGHTSCOUT_URL:-https://yournightscout.example.com}"
+      NIGHTSCOUT_TOKEN: "${NIGHTSCOUT_TOKEN:-}"
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: "30s"
+      timeout: "10s"
+      retries: 3
+      start_period: "15s"
+    networks:
+      - default
+
+networks:
+  default:
+    name: homelab
+    external: true

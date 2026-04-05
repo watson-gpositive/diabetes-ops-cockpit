@@ -7,6 +7,7 @@ import {
   BasalCard,
   LastMealCard,
   AnomalyAlertsCard,
+  LoopStatusCard,
   type LoadState,
 } from "@/components/dashboard";
 import type { BgEntry, Treatment } from "@/lib/nightscout/types";
@@ -17,6 +18,8 @@ import {
   useBasalData,
   useLastMeal,
   useAlerts,
+  useLoopStatus,
+  type LoopStatusData,
 } from "@/hooks/useNightscout";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import useSWR from "swr";
@@ -148,6 +151,7 @@ export default function DashboardPage() {
   const basalSwr = useBasalData();
   const lastMealSwr = useLastMeal();
   const alertsSwr = useAlerts();
+  const loopStatusSwr = useLoopStatus();
 
   // Touch lastUpdated on successful revalidation
   useEffect(() => {
@@ -165,6 +169,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (alertsSwr.data) touch();
   }, [alertsSwr.data, touch]);
+  useEffect(() => {
+    if (loopStatusSwr.data) touch();
+  }, [loopStatusSwr.data, touch]);
 
   // Derive LoadStates from SWR
   const bgState = useAdapter<{ entry: BgEntry; history: BgEntry[] }>(bgSwr);
@@ -178,6 +185,7 @@ export default function DashboardPage() {
   }>(basalSwr);
   const lastMealState = useAdapter<{ treatment: Treatment }>(lastMealSwr);
   const alertsState = useAdapter<AnomalyAlert[]>(alertsSwr);
+  const loopStatusState = useAdapter<LoopStatusData>(loopStatusSwr);
 
   // Pull-to-refresh — revalidate all keys
   const handleRefresh = useCallback(() => {
@@ -186,7 +194,8 @@ export default function DashboardPage() {
     void basalSwr.mutate();
     void lastMealSwr.mutate();
     void alertsSwr.mutate();
-  }, [bgSwr, iobCobSwr, basalSwr, lastMealSwr, alertsSwr]);
+    void loopStatusSwr.mutate();
+  }, [bgSwr, iobCobSwr, basalSwr, lastMealSwr, alertsSwr, loopStatusSwr]);
 
   const { isPulling, pullDistance, reset } = usePullToRefresh(handleRefresh);
 
@@ -196,7 +205,8 @@ export default function DashboardPage() {
     iobCobSwr.isValidating ||
     basalSwr.isValidating ||
     lastMealSwr.isValidating ||
-    alertsSwr.isValidating;
+    alertsSwr.isValidating ||
+    loopStatusSwr.isValidating;
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "short",
@@ -249,6 +259,9 @@ export default function DashboardPage() {
 
           {/* Basal */}
           <BasalCard state={basalState} />
+
+          {/* Loop Status */}
+          <LoopStatusCard state={loopStatusState} />
 
           {/* Last Meal — full width on all breakpoints */}
           <div className="sm:col-span-2 xl:col-span-3">

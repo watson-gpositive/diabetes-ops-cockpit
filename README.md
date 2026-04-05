@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Diabetes Ops Cockpit
 
-## Getting Started
+Real-time diabetes monitoring dashboard powered by Nightscout.
 
-First, run the development server:
+## Features
+
+- Blood glucose card with trend arrow
+- IOB / COB visualization
+- Basal rate + active temp target
+- Loop status indicator (AAPS / AndroidAPS)
+- Last meal / carb entry
+- Anomaly alerts engine
+- Pull-to-refresh + 5-minute auto-refresh
+
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create a `.env.local` file:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NIGHTSCOUT_URL=https://your-nightscout.example.com
+NIGHTSCOUT_TOKEN=your_read_api_token
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000)
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Homelab Deployment (Docker / Portainer)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Prerequisites
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Docker](https://docs.docker.com/get-docker/) installed
+- A running [Nightscout](https://nightscout.github.io/) instance with an API token
+- A Docker network named `homelab` (create with `docker network create homelab` if it doesn't exist)
 
-## Deploy on Vercel
+### Quick Start
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Copy the env template:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   cp .env.docker .env
+   ```
+
+2. Edit `.env` and set your Nightscout credentials:
+
+   ```
+   NIGHTSCOUT_URL=https://your-nightscout.example.com
+   NIGHTSCOUT_TOKEN=your_api_token_here
+   ```
+
+3. Deploy with Docker Compose:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   Or import `docker-compose.yml` as a stack in Portainer.
+
+4. The app will be available at `http://your-host:3000`
+
+### Health Check
+
+The container exposes a healthcheck at `http://your-host:3000/api/health`.
+
+### Environment Variables
+
+| Variable         | Description                                      | Required |
+| ---------------- | ------------------------------------------------ | -------- |
+| `NIGHTSCOUT_URL` | Full URL of your Nightscout instance             | Yes      |
+| `NIGHTSCOUT_TOKEN` | Nightscout API token (read-only is sufficient) | Yes      |
+
+---
+
+## Tech Stack
+
+- Next.js 16 (App Router, standalone output)
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- SWR for data fetching
