@@ -32,8 +32,8 @@ function injectConfig() {
   if (typeof window === "undefined") return;
   if (window.__NIGHTSCOUT_CONFIG__ !== undefined) return; // already set
 
-  const url = process.env.NIGHTSCOUT_URL ?? "";
-  const token = process.env.NIGHTSCOUT_TOKEN ?? "";
+  const url = process.env.NEXT_PUBLIC_NIGHTSCOUT_URL ?? "";
+  const token = process.env.NEXT_PUBLIC_NIGHTSCOUT_TOKEN ?? "";
   window.__NIGHTSCOUT_CONFIG__ = url && token ? { url, token } : null;
 }
 
@@ -43,9 +43,13 @@ function injectConfig() {
 
 function useLastUpdated() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const touchRef = useRef(false);
 
   function touch() {
-    setLastUpdated(new Date());
+    if (!touchRef.current) {
+      touchRef.current = true;
+      setLastUpdated(new Date());
+    }
   }
 
   return { lastUpdated, touch };
@@ -155,23 +159,23 @@ export default function DashboardPage() {
 
   // Touch lastUpdated on successful revalidation
   useEffect(() => {
-    if (bgSwr.data) touch();
-  }, [bgSwr.data, touch]);
+    if (bgSwr.data !== undefined) touch();
+  }, [bgSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (iobCobSwr.data) touch();
-  }, [iobCobSwr.data, touch]);
+    if (iobCobSwr.data !== undefined) touch();
+  }, [iobCobSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (basalSwr.data) touch();
-  }, [basalSwr.data, touch]);
+    if (basalSwr.data !== undefined) touch();
+  }, [basalSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (lastMealSwr.data) touch();
-  }, [lastMealSwr.data, touch]);
+    if (lastMealSwr.data !== undefined) touch();
+  }, [lastMealSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (alertsSwr.data) touch();
-  }, [alertsSwr.data, touch]);
+    if (alertsSwr.data !== undefined) touch();
+  }, [alertsSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (loopStatusSwr.data) touch();
-  }, [loopStatusSwr.data, touch]);
+    if (loopStatusSwr.data !== undefined) touch();
+  }, [loopStatusSwr.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive LoadStates from SWR
   const bgState = useAdapter<{ entry: BgEntry; history: BgEntry[] }>(bgSwr);

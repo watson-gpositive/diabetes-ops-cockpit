@@ -3,7 +3,7 @@
 /**
  * useNightscout — SWR hooks wrapping the Nightscout client fetchers.
  *
- * All hooks use a 5-minute refresh window (revalidateOnMount: false so
+ * All hooks use a 5-minute refresh window (revalidateOnMount: true to
  * they don't spike load on first render — data arrives from the client-side
  * cache if available, then revalidates in background).
  *
@@ -88,7 +88,7 @@ export function useBgData() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },
@@ -119,7 +119,7 @@ export function useIobCob() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },
@@ -186,7 +186,7 @@ export function useBasalData() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },
@@ -239,7 +239,7 @@ export function useLastMeal() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },
@@ -375,7 +375,7 @@ export function useAlerts() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },
@@ -453,7 +453,7 @@ export function useLoopStatus() {
     },
     {
       refreshInterval: REFRESH_INTERVAL,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
     },

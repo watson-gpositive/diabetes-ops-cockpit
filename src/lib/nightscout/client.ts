@@ -28,7 +28,8 @@ async function nightscoutRequest<T>(
   config: NightscoutConfig,
   params?: Record<string, string | number | boolean | undefined>,
 ): Promise<ApiResponse<T>> {
-  const url = new URL(`${config.url.replace(/\/$/, "")}/${path}`);
+  const base = config.url.replace(/\/$/, "").replace(/\/api\/v1\/.*$/, ""); // strip any existing /api/v1/... to get clean base
+  const url = new URL(`${base}/api/v1/${path}`);
 
   // Token auth: Nightscout uses token as a query param (not a header)
   url.searchParams.set("token", config.token);
