@@ -111,11 +111,13 @@ export function useIobCob() {
         throw new Error(result.error?.message ?? "Failed to load IOB/COB");
       }
 
-      const { loop } = result.data as { loop?: { IOB?: number; COB?: number } };
-      return {
-        iob: loop?.IOB ?? 0,
-        cob: loop?.COB ?? 0,
-      };
+      // AAPS stores IOB/COB in openaps.iob (not loop.IOB/COB)
+      const device = result.data as Record<string, unknown>;
+      const openapsRaw = (device.openaps ?? null) as Record<string, unknown> | null;
+      const iobRaw = (openapsRaw?.iob ?? null) as Record<string, unknown> | null;
+      const iob = typeof iobRaw?.iob === 'number' ? iobRaw.iob as number : 0;
+      const cob = typeof openapsRaw?.cob === 'number' ? openapsRaw.cob as number : 0;
+      return { iob, cob };
     },
     {
       refreshInterval: REFRESH_INTERVAL,
@@ -141,14 +143,33 @@ export function useBasalData() {
       const profile = profileResult.ok ? profileResult.data : null;
       const device = deviceResult.ok ? deviceResult.data : null;
 
-      // Basal from profile: take first scheduled entry
+      // Basal from profile: basal is nested inside store["ProfileName"] in Nightscout
       let activeBasal: number | null = null;
+      let targetLow = 80;
+      let targetHigh = 120;
       const profileRaw = (profileResult.data ?? null) as Record<string, unknown> | null;
       if (profileResult.ok && profileRaw) {
-        const basalArr = profileRaw.basal;
-        if (Array.isArray(basalArr) && basalArr.length > 0) {
-          const first = (basalArr[0] as Record<string, unknown>).value;
-          if (typeof first === "number") activeBasal = first;
+        const defaultProfile = (profileRaw.defaultProfile as string | null) ?? null;
+        const store = (profileRaw.store ?? null) as Record<string, Record<string, unknown>> | null;
+        if (defaultProfile && store && store[defaultProfile]) {
+          const profileData = store[defaultProfile];
+          const basalArr = profileData.basal as Array<{ time: string; timeAsSeconds: number; value: number }> | null;
+          if (Array.isArray(basalArr) && basalArr.length > 0) {
+            // Find the current time segment
+            const now = new Date();
+            const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            let current = basalArr[0];
+            for (const entry of basalArr) {
+              if (entry.timeAsSeconds <= currentSeconds) {
+                current = entry;
+              }
+            }
+            if (typeof current.value === "number") activeBasal = current.value;
+          }
+          const targetLowArr = profileData.target_low as Array<{ time: string; value: number }> | null;
+          const targetHighArr = profileData.target_high as Array<{ time: string; value: number }> | null;
+          if (targetLowArr && targetLowArr.length > 0) targetLow = targetLowArr[0].value ?? 80;
+          if (targetHighArr && targetHighArr.length > 0) targetHigh = targetHighArr[0].value ?? 120;
         }
       }
       // Fall back to pump basal rate
@@ -168,13 +189,6 @@ export function useBasalData() {
 
       const tempBasalRate = (loopRaw?.tempBasal as Record<string, unknown> | null)?.tempBasalRate as number | null ?? null;
       const tempBasalRemaining = (loopRaw?.tempBasal as Record<string, unknown> | null)?.remaining as number | null ?? null;
-
-      // Target range from profile or fall back to sensible defaults
-      const rawTargetLow = profileRaw?.targetLow as number | undefined;
-      const rawTargetHigh = profileRaw?.targetHigh as number | undefined;
-
-      const targetLow = rawTargetLow ?? 80;
-      const targetHigh = rawTargetHigh ?? 120;
 
       return {
         activeBasal: activeBasal ?? 0,
@@ -284,7 +298,9 @@ export function useAlerts() {
       // Requires IOB > 0.5 U to be actionable (risk of over-correction)
       if (entries.length >= 3 && latest) {
         const device = deviceResult.ok ? deviceResult.data : null;
-        const iob = ((device?.openaps?.IOB ?? device?.loop?.IOB) as number) ?? 0;
+        const openapsRaw = (device?.openaps ?? null) as Record<string, unknown> | null;
+        const iobRaw = (openapsRaw?.iob ?? null) as Record<string, unknown> | null;
+        const iob = typeof iobRaw?.iob === 'number' ? iobRaw.iob as number : 0;
         const oldest = entries[entries.length - 1];
         const drop = oldest.sgv - latest.sgv;
         if (drop > 50 && iob > 0.5) {
@@ -303,9 +319,12 @@ export function useAlerts() {
         const treatments = treatmentsResult.ok ? (treatmentsResult.data ?? []) : [];
         const twoHoursAgo = now - 2 * 60 * 60 * 1000;
         const recentBolus = treatments.find(
-          (t) =>
-            (t.eventType === "Bolus" || t.eventType === "Meal Bolus" || t.insulin != null) &&
-            t.created_at > twoHoursAgo,
+          (t) => {
+            const insulinOk = t.eventType === "Bolus" || t.eventType === "Meal Bolus" || t.insulin != null;
+            if (!insulinOk) return false;
+            const ts = typeof t.created_at === 'string' ? new Date(t.created_at).getTime() : t.created_at;
+            return ts > twoHoursAgo;
+          }
         );
         if (!recentBolus) {
           alerts.push({
@@ -319,29 +338,36 @@ export function useAlerts() {
       }
 
       // ── Rule 4: Open loop (not looping) for > 30 minutes ─────────────────
+      // AAPS: loop data in openaps.suggested.timestamp
       if (deviceResult.ok && deviceResult.data) {
-        const device = deviceResult.data;
-        const loopStatus = (device.openaps ?? device.loop) as {
-          status?: string;
-          timestamp?: number;
-        } | null;
-        const isLooping =
-          loopStatus?.status === "Looping" || loopStatus?.status === "looped";
-        const loopTimestamp = loopStatus?.timestamp ?? device.created_at;
-        const loopAgeMs = now - loopTimestamp;
-        const loopAgeMin = Math.floor(loopAgeMs / 60000);
-
-        if (!isLooping && loopAgeMin > 30) {
-          const reason = (loopStatus as { reason?: string })?.reason;
+        const device = deviceResult.data as Record<string, unknown>;
+        const openapsRaw = (device.openaps ?? null) as Record<string, unknown> | null;
+        const suggestedRaw = (openapsRaw?.suggested ?? null) as Record<string, unknown> | null;
+        const suggestedTs = suggestedRaw?.timestamp as string | null;
+        const lastLoopTs = suggestedTs ? new Date(suggestedTs).getTime() : null;
+        if (lastLoopTs === null) {
           alerts.push({
             id: "rule-open-loop",
-            severity: "critical",
-            title: "Open Loop Detected",
-            detail: reason
-              ? `Loop inactive for ${loopAgeMin} min. Reason: ${reason}`
-              : `Loop inactive for ${loopAgeMin} min — pump not in auto mode`,
-            timestamp: loopTimestamp,
+            severity: "warning",
+            title: "Open Loop — No Recent Data",
+            detail: "No loop activity found in device status",
+            timestamp: latest?.date ?? now,
           });
+        } else {
+          const loopAgeMs = now - lastLoopTs;
+          const loopAgeMin = Math.floor(loopAgeMs / 60000);
+          if (loopAgeMin > 30) {
+            const reason = typeof suggestedRaw?.reason === 'string' ? suggestedRaw.reason as string : null;
+            alerts.push({
+              id: "rule-open-loop",
+              severity: "critical",
+              title: "Open Loop Detected",
+              detail: reason
+                ? `Loop inactive for ${loopAgeMin} min. Reason: ${reason}`
+                : `Loop inactive for ${loopAgeMin} min — pump not in auto mode`,
+              timestamp: lastLoopTs,
+            });
+          }
         }
       }
 
@@ -411,35 +437,44 @@ export function useLoopStatus() {
       }
 
       const device = result.data as unknown as Record<string, unknown>;
-      const loopRaw = (device.loop ?? device.openaps ?? null) as Record<string, unknown> | null;
+      // AAPS stores loop data in openaps.suggested (not loop.status)
+      const openapsRaw = (device.openaps ?? null) as Record<string, unknown> | null;
+      const suggestedRaw = (openapsRaw?.suggested ?? null) as Record<string, unknown> | null;
+      const pumpRaw = (device.pump ?? null) as Record<string, unknown> | null;
+      const pumpExtended = (pumpRaw?.extended ?? null) as Record<string, unknown> | null;
 
-      // Determine status
+      // Determine status: AAPS has suggested data when it last ran
       let status: LoopStatusValue = "Unknown";
-      if (loopRaw) {
-        const rawStatus = loopRaw.status as string | undefined;
-        if (rawStatus === "Looping" || rawStatus === "looped") status = "Looping";
-        else if (rawStatus === "Not Looping" || rawStatus === "notLooping" || rawStatus === "looping") status = "Not Looping";
-        else if (rawStatus === "Suspended" || rawStatus === "suspended") status = "Suspended";
-        else if (rawStatus === "Error" || rawStatus === "error") status = "Error";
+      if (suggestedRaw) {
+        status = "Looping";
+      } else if (openapsRaw && !suggestedRaw) {
+        status = "Not Looping";
       }
 
-      // Pump status
-      const pumpRaw = (device.pump ?? null) as Record<string, unknown> | null;
-      const pumpStatus = typeof pumpRaw?.status === "string" ? pumpRaw.status : null;
+      // Pump status from extended info
+      const activeProfile = typeof pumpExtended?.ActiveProfile === 'string' ? pumpExtended.ActiveProfile as string : null;
+      const pumpStatus = activeProfile;
 
-      // Reservoir
-      const reservoir = typeof pumpRaw?.reservoir === "number" ? (pumpRaw.reservoir as number) : null;
+      // Reservoir from pump extended
+      const reservoir = typeof pumpExtended?.Reservoir === 'number' ? pumpExtended.Reservoir as number : null;
 
-      // Last loop timestamp
-      const lastLoop = (loopRaw?.timestamp as number | null) ?? (device.created_at as number | null);
+      // Last loop timestamp: suggested.timestamp is an ISO string in AAPS
+      let lastLoop: number | null = null;
+      const suggestedTs = suggestedRaw?.timestamp as string | null;
+      if (suggestedTs) {
+        lastLoop = new Date(suggestedTs).getTime();
+      } else {
+        const createdAt = device.created_at as string | number | null;
+        if (typeof createdAt === 'string') lastLoop = new Date(createdAt).getTime();
+        else if (typeof createdAt === 'number') lastLoop = createdAt;
+      }
 
-      // Enacted
-      const enactedRaw = (loopRaw?.enacted ?? null) as Record<string, unknown> | null;
-      const enactedRate = typeof enactedRaw?.rate === "number" ? (enactedRaw.rate as number) : null;
-      const enactedDuration = typeof enactedRaw?.duration === "number" ? Math.round(enactedRaw.duration as number) : null;
+      // Enacted rate from suggested (AAPS enacts temp basals via suggested)
+      const enactedRate = typeof suggestedRaw?.rate === 'number' ? suggestedRaw.rate as number : null;
+      const enactedDuration = typeof suggestedRaw?.duration === 'number' ? Math.round(suggestedRaw.duration as number) : null;
 
       // Reason
-      const reason = typeof loopRaw?.reason === "string" ? (loopRaw.reason as string) : null;
+      const reason = typeof suggestedRaw?.reason === 'string' ? suggestedRaw.reason as string : null;
 
       return {
         status,

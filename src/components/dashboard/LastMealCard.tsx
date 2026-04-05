@@ -12,8 +12,10 @@ interface LastMealCardProps {
   state: LoadState<LastMealData>;
 }
 
-function timeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+function timeAgo(timestamp: number | string): string {
+  const ms = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+  if (isNaN(ms)) return '?';
+  const seconds = Math.floor((Date.now() - ms) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -22,8 +24,10 @@ function timeAgo(timestamp: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("en-US", {
+function formatTime(timestamp: number | string): string {
+  const ms = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+  if (isNaN(ms)) return '?';
+  return new Date(ms).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
